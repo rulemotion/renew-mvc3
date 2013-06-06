@@ -92,6 +92,7 @@ class Application(mvc.Application):
 
         for filename in args:
             try:
+                print ">>", app
                 c = app.start_conversion(filename, options.converter)
             except ValueError:
                 message = 'could not parse %r' % filename

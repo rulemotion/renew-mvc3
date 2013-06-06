@@ -69,7 +69,7 @@ TEXT_INFO = widgetutil.css_to_color('#808080')
 TEXT_COLOR = widgetutil.css_to_color('#ffffff')
 TEXT_SHADOW = widgetutil.css_to_color('#000000')
 
-TABLE_WIDTH, TABLE_HEIGHT = 470, 87
+TABLE_WIDTH, TABLE_HEIGHT = 470, 177
 
 class CustomLabel(widgetset.Background):
     def __init__(self, text=''):
@@ -271,25 +271,25 @@ class SettingsButton(widgetset.CustomButton):
                     image_path('%s-icon-off.png' % name)))
             if self.surface_on.height != self.surface_off.height:
                 raise ValueError('invalid surface: height mismatch')
-	    self.image_padding = self.calc_image_padding(name)
+            self.image_padding = self.calc_image_padding(name)
         else:
             self.surface_on = self.surface_off = None
 
     def calc_image_padding(self, name):
-	"""Add some padding to the bottom of our image icon.  This can be used
-	to fine tune where it gets placed.
+        """Add some padding to the bottom of our image icon.  This can be used
+        to fine tune where it gets placed.
 
-	:returns: padding in as a (top, right, bottom, left) tuple
-	"""
+        :returns: padding in as a (top, right, bottom, left) tuple
+        """
 
-	# NOTE: we vertically center the images, so in order to move it X
-	# pickels up, we need X*2 pixels of bottom padding
-	if name == 'android':
-	    return (0, 0, 2, 0)
-	elif name in ('apple', 'other'):
-	    return (0, 0, 4, 0)
-	else:
-	    return (0, 0, 0, 0)
+        # NOTE: we vertically center the images, so in order to move it X
+        # pickels up, we need X*2 pixels of bottom padding
+        if name == 'android':
+            return (0, 0, 2, 0)
+        elif name in ('apple', 'other'):
+            return (0, 0, 4, 0)
+        else:
+            return (0, 0, 0, 0)
 
     def textbox(self, layout_manager):
         layout_manager.set_font(SETTINGS_FONTSIZE, family=SETTINGS_FONT)
@@ -312,7 +312,7 @@ class SettingsButton(widgetset.CustomButton):
             arrow = self.arrow_off
             layout_manager.set_text_color(TEXT_DISABLED)
         if image:
-	    padding = cellpack.Padding(image, *self.image_padding)
+            padding = cellpack.Padding(image, *self.image_padding)
             hbox.pack(cellpack.Alignment(padding, xscale=0, yscale=0,
                                          yalign=0.5))
         if self.name:
@@ -435,19 +435,19 @@ class CustomOptions(widgetset.Background):
 
     def create_top(self):
         hbox = widgetset.HBox(spacing=0)
-	path_label = WebStyleButton()
-	path_label.set_text('Show output folder')
+        path_label = WebStyleButton()
+        path_label.set_text('Show output folder')
         path_label.set_font(DEFAULT_FONT, widgetconst.SIZE_SMALL)
         path_label.connect('clicked', self.on_path_label_clicked)
         create_thumbnails = widgetset.Checkbox('Create Thumbnails',
-		color=TEXT_COLOR)
+                color=TEXT_COLOR)
         create_thumbnails.set_size(widgetconst.SIZE_SMALL)
         create_thumbnails.connect('toggled',
-		self.on_create_thumbnails_changed)
+                self.on_create_thumbnails_changed)
 
         hbox.pack_start(widgetutil.align(path_label, xalign=0.5), expand=True)
         hbox.pack_start(widgetutil.align(create_thumbnails, xalign=0.5),
-		expand=True)
+                expand=True)
         # XXX: disabled until we can figure out how to do this properly.
         #button = widgetset.Button('...')
         #button.connect('clicked', self.on_destination_clicked)
@@ -458,15 +458,15 @@ class CustomOptions(widgetset.Background):
         return widgetutil.align(hbox, xscale=1.0, yalign=0.5)
 
     def _get_save_to_path(self):
-	if self.options['destination'] is None:
-	    return get_conversion_directory()
-	else:
-	    return self.options['destination']
+        if self.options['destination'] is None:
+            return get_conversion_directory()
+        else:
+            return self.options['destination']
 
     def on_path_label_clicked(self, label):
         save_path = self._get_save_to_path()
         save_path = convert_path_for_subprocess(save_path)
-	openfiles.reveal_folder(save_path)
+        openfiles.reveal_folder(save_path)
 
     def create_left(self):
         self.custom_size = widgetset.Checkbox('Custom Size', color=TEXT_COLOR)
@@ -510,7 +510,7 @@ class CustomOptions(widgetset.Background):
         b1 = widgetset.RadioButton('4:3', self.button_group, color=TEXT_COLOR)
         b2 = widgetset.RadioButton('3:2', self.button_group, color=TEXT_COLOR)
         b3 = widgetset.RadioButton('16:9', self.button_group, color=TEXT_COLOR)
-	b1.set_selected()
+        b1.set_selected()
         b1.set_size(widgetconst.SIZE_SMALL)
         b2.set_size(widgetconst.SIZE_SMALL)
         b3.set_size(widgetconst.SIZE_SMALL)
@@ -719,7 +719,7 @@ class ConversionModel(widgetset.TableModel):
                   conversion.duration or 0,
                   conversion.progress or 0,
                   conversion.eta or 0,
-                  self.get_image(conversion.video.get_thumbnail(complete, 90, 70)),
+                  self.get_image(conversion.video.get_thumbnail(complete, 90, 160)),
                   conversion
                   )
         iter_ = self.conversion_to_iter.get(conversion)
@@ -739,10 +739,12 @@ class ConversionModel(widgetset.TableModel):
             logging.info('calling completion handler for get_thumbnail on '
                          'removal')
 
-        thumbnail_path = conversion.video.get_thumbnail(complete, 90, 70)
-        if thumbnail_path:
-            del self.thumbnail_to_image[thumbnail_path]
-        return super(ConversionModel, self).remove(iter_)
+        try:
+            thumbnail_path = conversion.video.get_thumbnail(complete, 90, 160)
+            if thumbnail_path:
+                del self.thumbnail_to_image[thumbnail_path]
+        finally:
+            return super(ConversionModel, self).remove(iter_)
 
 
 class IconWithText(cellpack.HBox):
@@ -791,13 +793,20 @@ class ConversionCellRenderer(widgetset.CustomCellRenderer):
         left_right.pack(self.layout_left(layout_manager))
         left_right.pack(top_bottom, expand=True)
         layout_manager.set_text_color(TEXT_COLOR)
+
+        encoder = layout_manager.textbox(self.converter)
+        alignment = cellpack.Padding(encoder,
+                                     top=int(ITEM_TITLE_FONTSIZE*13.0))
+        top_bottom.pack(alignment)
+
         layout_manager.set_font(ITEM_TITLE_FONTSIZE, bold=True,
                                 family=ITEM_TITLE_FONT)
         title = layout_manager.textbox(os.path.basename(self.input))
         title.set_wrap_style('truncated-char')
         alignment = cellpack.Padding(cellpack.TruncatedTextLine(title),
-                                     top=25)
+                                     top=int(ITEM_TITLE_FONTSIZE*13.0/2.0))
         top_bottom.pack(alignment)
+
         layout_manager.set_font(ITEM_ICONS_FONTSIZE, family=ITEM_ICONS_FONT)
 
         bottom = self.layout_bottom(layout_manager, hotspot)
@@ -814,13 +823,13 @@ class ConversionCellRenderer(widgetset.CustomCellRenderer):
 
     @staticmethod
     def draw_background(context, x, y, width, height):
-	# draw main background
+        # draw main background
         gradient = widgetset.Gradient(x, y, x, height)
         gradient.set_start_color(GRADIENT_TOP)
         gradient.set_end_color(GRADIENT_BOTTOM)
         context.rectangle(x, y, width, height)
         context.gradient_fill(gradient)
-	# draw bottom line
+        # draw bottom line
         context.set_line_width(1)
         context.set_color((0, 0, 0))
         context.move_to(0, height-0.5)
@@ -945,7 +954,7 @@ class ConvertButton(widgetset.CustomButton):
         self.set_off()
 
     def set_on(self):
-        self.label = 'Convert to %s' % app.widgetapp.current_converter.name
+        #self.label = 'Convert to %s' % app.widgetapp.current_converter.name
         self.image = self.on
         self.set_cursor(widgetconst.CURSOR_POINTING_HAND)
         self.queue_redraw()
@@ -1020,14 +1029,15 @@ class TextDialog(widgetset.Dialog):
 
 class Application(mvc.Application):
     def __init__(self, simultaneous=None):
-	mvc.Application.__init__(self, simultaneous)
-	self.create_signal('window-shown')
-	self.sent_window_shown = False
+        mvc.Application.__init__(self, simultaneous)
+        self.create_signal('window-shown')
+        self.sent_window_shown = False
 
     def startup(self):
         if self.started:
             return
 
+        self.default_converters = ['webmvp8', 'oggtheora']
         self.current_converter = EMPTY_CONVERTER
 
         mvc.Application.startup(self)
@@ -1035,7 +1045,7 @@ class Application(mvc.Application):
         self.menu_manager = menus.MenuManager()
         self.menu_manager.setup_menubar(self.menubar)
 
-        self.window = widgetset.Window("Miro Video Converter")
+        self.window = widgetset.Window("Miro Video Converter (Renew Edition)")
         self.window.connect('on-shown', self.on_window_shown)
         self.window.connect('will-close', self.destroy)
 
@@ -1058,8 +1068,10 @@ class Application(mvc.Application):
         self.table.add_column(c)
         self.table.connect('hotspot-clicked', self.hotspot_clicked)
 
+
         # bottom buttons
-        converter_types = ('apple', 'android', 'other', 'format')
+        #converter_types = ('apple', 'android', 'other', 'format')
+        converter_types = ['format']
         converters = {}
         for c in self.converter_manager.list_converters():
             media_type = c.media_type
@@ -1094,7 +1106,7 @@ class Application(mvc.Application):
                 else:
                     options.append((c.name, c.identifier))
             # Don't sort if formats..
-            self.sort_converter_menu(type_, options)
+            #self.sort_converter_menu(type_, options)
             if more_devices:
                 options.append(more_devices)
             menu = SettingsButton(type_)
@@ -1105,12 +1117,13 @@ class Application(mvc.Application):
         omb.set_child(widgetutil.pad(buttons, top=2, bottom=2,
                                      left=2, right=2))
         self.button_bar.pack_start(omb)
-
+        """
         self.settings_button = SettingsButton('settings')
         omb = OptionMenuBackground()
         omb.set_child(widgetutil.pad(self.settings_button, top=2,
                                      bottom=2, left=2, right=2))
         self.button_bar.pack_end(omb)
+        """
 
         self.drop_target = FileDropTarget()
         self.drop_target.set_size_request(-1, 70)
@@ -1119,9 +1132,9 @@ class Application(mvc.Application):
         vbox = widgetset.VBox()
         self.vbox = vbox
 
-	# add menubars, if we're not on windows
-	if sys.platform != 'win32':
-	    attach_menubar()
+        # add menubars, if we're not on windows
+        if sys.platform != 'win32':
+            attach_menubar()
 
         self.scroller = widgetset.Scroller(False, True)
         self.scroller.set_size_request(0, 0)
@@ -1132,6 +1145,7 @@ class Application(mvc.Application):
 
         bottom = BottomBackground()
         bottom_box = widgetset.VBox()
+        """
         self.convert_label = CustomLabel('Convert to')
         self.convert_label.set_font(CONVERT_TO_FONT, CONVERT_TO_FONTSIZE)
         self.convert_label.set_color(TEXT_COLOR)
@@ -1139,10 +1153,11 @@ class Application(mvc.Application):
                                                     top_pad=10,
                                                     bottom_pad=10))
         bottom_box.pack_start(self.button_bar)
+        """
 
         self.options = CustomOptions()
         self.options.connect('setting-changed', self.on_setting_changed)
-        self.settings_button.connect('clicked', self.on_settings_toggle)
+        #self.settings_button.connect('clicked', self.on_settings_toggle)
         bottom_box.pack_start(widgetutil.align_right(self.options,
                                                      right_pad=5))
 
@@ -1194,11 +1209,11 @@ class Application(mvc.Application):
                 self.file_activated(widget, pathname)
 
     def on_window_shown(self, window):
-	# only emit window-shown once, even if our window gets shown, hidden,
-	# and shown again
-	if not self.sent_window_shown:
-	    self.emit("window-shown")
-	    self.sent_window_shown = True
+        # only emit window-shown once, even if our window gets shown, hidden,
+        # and shown again
+        if not self.sent_window_shown:
+            self.emit("window-shown")
+            self.sent_window_shown = True
 
     def destroy(self, widget):
         for conversion in self.conversion_manager.in_progress.copy():
@@ -1265,8 +1280,8 @@ class Application(mvc.Application):
         if not has_conversions:
             for m in self.menus:
                 m.set_selected(False)
-            self.settings_button.set_selected(False)
-        self.convert_label.set_color(TEXT_DISABLED)
+            #self.settings_button.set_selected(False)
+        #self.convert_label.set_color(TEXT_DISABLED)
         # Set the colors - all are enabled if all conversions complete, or
         # if we have conversions conversions but the converter has not yet
         # been set.
@@ -1275,7 +1290,8 @@ class Application(mvc.Application):
           all_done):
             for m in self.menus:
                 m.set_selected(True)
-            self.settings_button.set_selected(True)
+            #self.settings_button.set_selected(True)
+        """
         if self.current_converter is EMPTY_CONVERTER:
             self.convert_label.set_text('Convert to')
         elif can_cancel:
@@ -1285,6 +1301,7 @@ class Application(mvc.Application):
             target = self.current_converter.name
             self.convert_label.set_text('Will convert to %s' % target)
             self.convert_label.set_color(TEXT_ACTIVE)
+        """
         if all_done:
             self.convert_button.set_clear()
         elif (self.current_converter is EMPTY_CONVERTER or not
@@ -1299,12 +1316,14 @@ class Application(mvc.Application):
             self.convert_button.set_on()
         if can_cancel:
             self.convert_button.set_stop()
+        """
             self.button_bar.disable()
         else:
             if has_conversions:
                 self.button_bar.enable()
             else:
                 self.button_bar.disable()
+        """
 
     def file_activated(self, widget, filename):
         filename = os.path.realpath(filename)
@@ -1326,17 +1345,22 @@ class Application(mvc.Application):
             logging.info('invalid file %r, cannot parse', filename,
                     exc_info=True)
             return
-        c = self.conversion_manager.get_conversion(
-            vf,
-            self.current_converter,
-            output_dir=self.options.options['destination'])
-        c.listen(self.update_conversion)
-        if self.conversion_manager.running:
-            # start running automatically if a conversion is already in
-            # progress
-            self.conversion_manager.run_conversion(c)
-        self.update_conversion(c)
-        self.update_table_size()
+
+        #for identifier in ['oggtheora']:
+        #for identifier in ['webmvp8']:
+        for identifier in self.default_converters:
+            self.current_converter = self.converter_manager.get_by_id(identifier)
+            c = self.conversion_manager.get_conversion(
+                vf,
+                self.current_converter,
+                output_dir=self.options.options['destination'])
+            c.listen(self.update_conversion)
+            if self.conversion_manager.running:
+                # start running automatically if a conversion is already in
+                # progress
+                self.conversion_manager.run_conversion(c)
+            self.update_conversion(c)
+            self.update_table_size()
 
     def on_select_converter(self, widget, identifier):
         self.current_converter = self.converter_manager.get_by_id(identifier)
@@ -1358,11 +1382,13 @@ class Application(mvc.Application):
             for c in self.model.conversions():
                 c.status = 'initialized'
 
+        """
         if self.current_converter is not EMPTY_CONVERTER:
             self.convert_label.set_text(
                 'Will convert to %s' % self.current_converter.name)
         else:
             self.convert_label.set_text('Convert to')
+        """
 
         if not self.current_converter.audio_only:
             self.options.enable_custom_size()
@@ -1404,7 +1430,7 @@ class Application(mvc.Application):
                     for conversion in self.model.conversions():
                         if conversion.status == 'initialized':
                             self.conversion_manager.run_conversion(conversion)
-                self.button_bar.disable()
+                #self.button_bar.disable()
                 # all done: no conversion job should be running at this point
                 all_done = self.model.all_conversions_done()
                 if all_done:
@@ -1437,13 +1463,13 @@ class Application(mvc.Application):
 
     def update_table_size(self):
         conversions = len(self.model)
-        total_height = 380
+        total_height = 414
         if not conversions:
             self.scroller.set_size_request(-1, 0)
             self.drop_target.set_small(False)
             self.drop_target.set_size_request(-1, total_height)
         else:
-            height = min(TABLE_HEIGHT * conversions, 320)
+            height = min(TABLE_HEIGHT * conversions, 354)
             self.scroller.set_size_request(-1, height)
             self.drop_target.set_small(True)
             self.drop_target.set_size_request(-1, total_height - height)
@@ -1502,7 +1528,7 @@ class Application(mvc.Application):
             return
 
         if (self.current_converter.identifier != 'custom' and
-		setting != 'create-thumbnails'):
+                setting != 'create-thumbnails'):
             if hasattr(self.current_converter, 'simple'):
                 self.current_converter = self.current_converter.simple(
                     self.current_converter.name)
@@ -1531,8 +1557,8 @@ class Application(mvc.Application):
                 old_size = self.current_converter.old_size
                 (self.current_converter.width,
                  self.current_converter.height) = old_size
-	elif setting == 'create-thumbnails':
-	    self.conversion_manager.create_thumbnails = bool(value)
+        elif setting == 'create-thumbnails':
+            self.conversion_manager.create_thumbnails = bool(value)
 
 if __name__ == "__main__":
     sys.dont_write_bytecode = True

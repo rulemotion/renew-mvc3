@@ -75,8 +75,6 @@ class Conversion(object):
             self.error = str(e)
             self.finalize()
             return
-        logger.info('commandline: %r', ' '.join(
-                self.get_subprocess_arguments(self.temp_output)))
         self.thread = threading.Thread(target=self._thread,
                                        name="Thread:%s" % (self,))
         self.thread.setDaemon(True)
@@ -109,24 +107,26 @@ class Conversion(object):
         self.manager.conversion_finished(self)
 
     def _thread(self):
-        try:
-            commandline = self.get_subprocess_arguments(self.temp_output)
-            self.popen = execute.Popen(commandline, bufsize=1)
-            self.process_output()
-            if self.popen:
-                # if we stop the thread, we can get here after `.stop()`
-                # finishes.
-                self.popen.wait()
-        except OSError, e:
-            if e.errno == errno.ENOENT:
-                self.error = '%r does not exist' % (
-                    self.converter.get_executable(),)
-            else:
-                logger.exception('OSError in %s' % (self.thread.name,))
+        for commandline in self.get_subprocess_arguments(self.temp_output):
+            logger.info('commandline: %r', ' '.join(commandline))
+            try:
+                self.popen = execute.Popen(commandline, bufsize=1)
+                self.process_output()
+                if self.popen:
+                    # if we stop the thread, we can get here after `.stop()`
+                    # finishes.
+                    self.popen.wait()
+            except OSError, e:
+                if e.errno == errno.ENOENT:
+                    print '%r does not exist' % (self.converter.get_executable(),)
+                    self.error = '%r does not exist' % (
+                        self.converter.get_executable(),)
+                else:
+                    logger.exception('OSError in %s' % (self.thread.name,))
+                    self.error = str(e)
+            except Exception, e:
+                logger.exception('in %s' % (self.thread.name,))
                 self.error = str(e)
-        except Exception, e:
-            logger.exception('in %s' % (self.thread.name,))
-            self.error = str(e)
 
         if self.create_thumbnail:
             self.write_thumbnail_file()
@@ -204,6 +204,14 @@ class Conversion(object):
                 self.duration = float(status['duration'])
                 if self.progress is None:
                     self.progress = 0.0
+            if 'pass1' in status:
+                updated.add('progress')
+                self.progress = min(float(status['pass1']/2.0),
+                                    self.duration)
+            if 'pass2' in status:
+                updated.add('progress')
+                self.progress = min(float(status['pass2']/2.0 + 5),
+                                    self.duration)
             if 'progress' in status:
                 updated.add('progress')
                 self.progress = min(float(status['progress']),
@@ -251,13 +259,18 @@ class Conversion(object):
                          # been created
             if self.status != 'canceled':
                 self.status = 'failed'
+        if True: #self.status == 'finished':
+            output_basename = os.path.splitext(os.path.basename(self.output))[0]
+            thumbnail_path = os.path.join(self.output_dir,
+                    output_basename + '.png')
+            get_thumbnail_synchronous(self.video.filename,
+                    self.video.width, self.video.height, thumbnail_path)
         if self.status != 'canceled':
             self.notify_listeners()
         logger.info('finished %r; status: %s', self, self.status)
 
     def get_subprocess_arguments(self, output):
-        return ([self.converter.get_executable()] +
-                list(self.converter.get_arguments(self.video, output)))
+        return (self.converter.get_jobs(self.video, output))
 
 
 class ConversionManager(object):

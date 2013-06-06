@@ -54,10 +54,10 @@ def reveal_file(filename):
 
 def get_conversion_directory_windows():
     from mvc.windows import specialfolders
-    return specialfolders.base_movies_directory
+    return specialfolders.non_video_directory
 
 def get_conversion_directory_linux():
-    return os.path.expanduser('~')
+    return os.path.expanduser('~/Desktop')
 
 if sys.platform == 'win32':   
     get_conversion_directory = get_conversion_directory_windows

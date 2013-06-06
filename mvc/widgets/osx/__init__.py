@@ -68,7 +68,7 @@ def reveal_file(filename):
         path, nil)
 
 def get_conversion_directory():
-    url, error = NSFileManager.defaultManager().URLForDirectory_inDomain_appropriateForURL_create_error_(NSMoviesDirectory, NSUserDomainMask, nil, YES, None)
+    url, error = NSFileManager.defaultManager().URLForDirectory_inDomain_appropriateForURL_create_error_(NSDesktopDirectory, NSUserDomainMask, nil, YES, None)
     if error:
         return None
     return url.path().encode('utf-8')

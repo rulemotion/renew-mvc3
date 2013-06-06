@@ -86,3 +86,7 @@ def customize_ffmpeg_parameters(params):
                     '-coder', '0', '-bf', '0', '-refs', '1',
                     '-flags2', '-wpred-dct8x8']
     return params
+
+@memoize
+def get_ffmpeg2theora_executable_path():
+    return which("ffmpeg2theora")

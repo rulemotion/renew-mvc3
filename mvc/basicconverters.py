@@ -3,6 +3,7 @@ import re
 
 from mvc import converter
 
+"""
 class WebM_HD(converter.FFmpegConverterInfo720p):
     media_type = 'format'
     extension = 'webm'
@@ -132,3 +133,31 @@ ingest_formats = ('Ingest Formats', [dnxhd_1080, dnxhd_720, prores_1080,
 null_converter = NullConverter('Same Format')
 
 converters = [video_formats, audio_formats, ingest_formats, null_converter]
+"""
+
+class MP4(converter.FFmpegConverterInfo):
+    media_type = 'format'
+    extension = 'mp4'
+    parameters = ('-f mp4 -crf 22 -vcodec libx264 -preset slow ')
+
+class WebM(converter.FFmpegConverterInfo):
+    media_type = 'format'
+    extension = 'webm'
+    parameters = ('-y -skip_threshold 0 -rc_buf_aggressivity 0 -bufsize 6000k -rc_init_occupancy 4000 -threads 4 -deadline good -cpu-used 0 '
+                  '-crf 0 -qmin 0 -qmax 0 '
+                  '-vb 1000k '
+                  '-vcodec libvpx '
+                  '-r 25 '
+                  '-an '
+                  '-f webm ')
+
+class OggTheora(converter.FFmpeg2TheoraConverterInfo):
+    media_type = 'format'
+    extension = 'ogv'
+    parameters = ('-v 10 -V 1000 --two-pass -F 25 --noaudio')
+
+mp4 = MP4('MP4')
+webm = WebM('WebM (VP8)')
+theora = OggTheora('Ogg (Theora)')
+
+converters = [webm, theora]

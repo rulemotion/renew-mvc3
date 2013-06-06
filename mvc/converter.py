@@ -44,7 +44,10 @@ class ConverterInfo(object):
     def get_executable(self):
         raise NotImplementedError
 
-    def get_arguments(self, video, output):
+    def get_arguments(self, video, output, method=None):
+        raise NotImplementedError
+
+    def get_jobs(self, video, output):
         raise NotImplementedError
 
     def get_output_filename(self, video):
@@ -53,7 +56,7 @@ class ConverterInfo(object):
         if ext and ext[0] == '.':
             ext = ext[1:]
         extension = self.extension if self.extension else ext
-        return '%s.%s.%s' % (name, self.identifier, extension)
+        return '%s.%s' % (name, extension)
 
     def get_output_size_guess(self, video):
         if not self.bitrate or not video.duration:
@@ -98,9 +101,9 @@ class ConverterInfo(object):
 
         :returns: (width, height) tuple
         """
-	return utils.rescale_video((video.width, video.height),
-		(self.width, self.height),
-		dont_upsize=self.dont_upsize)
+        return utils.rescale_video((video.width, video.height),
+                (self.width, self.height),
+                dont_upsize=self.dont_upsize)
 
     def process_status_line(self, line):
         raise NotImplementedError
@@ -115,6 +118,8 @@ class FFmpegConverterInfo(ConverterInfo):
     """
     DURATION_RE = re.compile(r'\W*Duration: (\d\d):(\d\d):(\d\d)\.(\d\d)'
                              '(, start:.*)?(, bitrate:.*)?')
+    FIRST_PASS = re.compile(r'(?:frame=.* fps=.* q=.* )?size=.* time=10000000000\.00 '
+                             'bitrate=(.*)')
     PROGRESS_RE = re.compile(r'(?:frame=.* fps=.* q=.* )?size=.* time=(.*) '
                              'bitrate=(.*)')
     LAST_PROGRESS_RE = re.compile(r'frame=.* fps=.* q=.* Lsize=.* time=(.*) '
@@ -126,29 +131,156 @@ class FFmpegConverterInfo(ConverterInfo):
     def get_executable(self):
         return settings.get_ffmpeg_executable_path()
 
-    def get_arguments(self, video, output):
-        args = ['-i', utils.convert_path_for_subprocess(video.filename),
-                 '-strict', 'experimental']
+    def get_arguments(self, video, output, method):
+        args = ['-i', utils.convert_path_for_subprocess(video.filename)]
         args.extend(settings.customize_ffmpeg_parameters(
             self.get_parameters(video)))
         if not (self.audio_only or video.audio_only):
             width, height = self.get_target_size(video)
             args.append("-s")
             args.append('%ix%i' % (width, height))
-        args.extend(self.get_extra_arguments(video, output))
-	args.append(self.convert_output_path(output))
+        args.extend(self.get_extra_arguments(video, output, method))
+        if method is not None and method == 'pass1':
+            args.append("/dev/null")
+        else:
+            args.append(self.convert_output_path(output))
         return args
 
+    def get_jobs(self, video, output):
+        pass1 = [self.get_executable()]+list(self.get_arguments(video, output, 'pass1'))
+        pass2 = [self.get_executable()]+list(self.get_arguments(video, output, 'pass2'))
+
+        return [pass1, pass2]
+
     def convert_output_path(self, output_path):
-	"""Convert our output path so that it can be passed to ffmpeg."""
-	# this is a bit tricky, because output_path doesn't exist on windows
-	# yet, so we can't just call convert_path_for_subprocess().  Instead,
-	# call convert_path_for_subprocess() on the output directory, and
-	# assume that the filename only contains safe characters
-	output_dir = os.path.dirname(output_path)
-	output_filename = os.path.basename(output_path)
-	return os.path.join(utils.convert_path_for_subprocess(output_dir),
-		output_filename)
+        """Convert our output path so that it can be passed to ffmpeg."""
+        # this is a bit tricky, because output_path doesn't exist on windows
+        # yet, so we can't just call convert_path_for_subprocess().  Instead,
+        # call convert_path_for_subprocess() on the output directory, and
+        # assume that the filename only contains safe characters
+        output_dir = os.path.dirname(output_path)
+        output_filename = os.path.basename(output_path)
+        return os.path.join(utils.convert_path_for_subprocess(output_dir),
+                output_filename)
+
+    def get_extra_arguments(self, video, output, method=None):
+        """Subclasses can override this to add argumenst to the ffmpeg command
+        line.
+        """
+        if method is not None and method == 'pass1':
+            return ['-auto-alt-ref', '1', '-lag-in-frames', '16', '-pass', '1', '-passlogfile', '/tmp/'+os.path.basename(output)]
+        elif method is not None and method == 'pass2':
+            return ['-pass', '2', '-passlogfile', '/tmp/'+os.path.basename(output)]
+        else:
+            return []
+
+    def get_parameters(self, video):
+        if self.parameters is None:
+            raise ValueError("%s: parameters is None" % self)
+        elif isinstance(self.parameters, basestring):
+            return self.parameters.split()
+        else:
+            return list(self.parameters)
+
+    @staticmethod
+    def _check_for_errors(line):
+        if line.startswith('Unknown'):
+            return line
+        if line.startswith("Error"):
+            if not line.startswith("Error while decoding stream"):
+                return line
+
+    @classmethod
+    def process_status_line(klass, video, line):
+        error = klass._check_for_errors(line)
+        if error:
+            return {'finished': True, 'error': error}
+
+        match = klass.DURATION_RE.match(line)
+        if match is not None:
+            hours, minutes, seconds, centi = [
+                int(m) for m in match.groups()[:4]]
+            return {'duration': hms_to_seconds(hours, minutes,
+                                               seconds + 0.01 * centi)}
+
+        match = klass.FIRST_PASS.match(line)
+        if match is not None:
+            return {'pass1': 0.2}
+
+        match = klass.PROGRESS_RE.match(line)
+        if match is not None:
+            t = match.group(1)
+            if ':' in t:
+                hours, minutes, seconds = [float(m) for m in t.split(':')[:3]]
+                return {'progress': hms_to_seconds(hours, minutes, seconds)}
+            else:
+                return {'progress': float(t)}
+
+        match = klass.LAST_PROGRESS_RE.match(line)
+        if match is not None:
+            return {'finished': True}
+
+class FFmpegConverterInfo1080p(FFmpegConverterInfo):
+    def __init__(self, name):
+        FFmpegConverterInfo.__init__(self, name, 1920, 1080)
+
+class FFmpegConverterInfo720p(FFmpegConverterInfo):
+    def __init__(self, name):
+        FFmpegConverterInfo.__init__(self, name, 1080, 720)
+
+class FFmpegConverterInfo480p(FFmpegConverterInfo):
+    def __init__(self, name):
+        FFmpegConverterInfo.__init__(self, name, 720, 480)
+
+class FFmpeg2TheoraConverterInfo(ConverterInfo):
+    """Base class for all ffmpeg2theora-based conversions.
+
+    Subclasses must override the parameters attribute and supply it with the
+    ffmpeg command line for the conversion.  parameters can either be a list
+    of arguments, or a string in which case split() will be called to create
+    the list.
+    """
+    DURATION_RE = re.compile(r'\W*Duration: (\d\d):(\d\d):(\d\d)\.(\d\d)'
+                             '(, start:.*)?(, bitrate:.*)?')
+    FIRST_PASS = re.compile(r'Scanning first pass pos:\W*(\d?\d:\d\d:\d\d\.\d\d) '
+                            'ET:\W*(\d\d:\d\d:\d\d).*')
+    PROGRESS_RE = re.compile(r'\W*(\d?\d:\d\d:\d\d\.\d\d) '
+                             'audio:\W*(.*) video:\W*(.*), ET:\W*(\d\d:\d\d:\d\d), est. size:\W(.*)')
+    LAST_PROGRESS_RE = re.compile(r'\W*(\d?\d:\d\d:\d\d\.\d\d) '
+                             'audio:\W*(.*) video:\W*(.*), time elapsed:\W*(\d\d:\d\d:\d\d)')
+
+    extension = None
+    parameters = None
+
+    def get_executable(self):
+        return settings.get_ffmpeg2theora_executable_path()
+
+    def get_arguments(self, video, output):
+        args = []
+        args.extend(settings.customize_ffmpeg_parameters(
+            self.get_parameters(video)))
+        if not (self.audio_only or video.audio_only):
+            width, height = self.get_target_size(video)
+            args.extend(['--width', '%s' % width])
+            args.extend(['--height', '%s' % height])
+        args.extend(self.get_extra_arguments(video, output))
+        args.extend(['--output', self.convert_output_path(output)])
+        args.append(utils.convert_path_for_subprocess(video.filename))
+        return args
+
+    def get_jobs(self, video, output):
+        return [[self.get_executable()]+list(self.get_arguments(video, output))]
+
+    def convert_output_path(self, output_path):
+        """Convert our output path so that it can be passed to ffmpeg."""
+        # this is a bit tricky, because output_path doesn't exist on windows
+        # yet, so we can't just call convert_path_for_subprocess().  Instead,
+        # call convert_path_for_subprocess() on the output directory, and
+        # assume that the filename only contains safe characters
+        output_dir = os.path.dirname(output_path)
+        output_filename = os.path.basename(output_path)
+        return os.path.join(utils.convert_path_for_subprocess(output_dir),
+                output_filename)
 
     def get_extra_arguments(self, video, output):
         """Subclasses can override this to add argumenst to the ffmpeg command
@@ -185,30 +317,27 @@ class FFmpegConverterInfo(ConverterInfo):
             return {'duration': hms_to_seconds(hours, minutes,
                                                seconds + 0.01 * centi)}
 
+        match = klass.FIRST_PASS.match(line)
+        if match is not None:
+            t = match.group(1)
+            if ':' in t:
+                hours, minutes, seconds = [float(m) for m in t.split(':')[:3]]
+                return {'pass1': hms_to_seconds(hours, minutes, seconds)}
+            else:
+                return {'pass1': float(t)}
+
         match = klass.PROGRESS_RE.match(line)
         if match is not None:
             t = match.group(1)
             if ':' in t:
                 hours, minutes, seconds = [float(m) for m in t.split(':')[:3]]
-                return {'progress': hms_to_seconds(hours, minutes, seconds)}
+                return {'pass2': hms_to_seconds(hours, minutes, seconds)}
             else:
-                return {'progress': float(t)}
+                return {'pass2': float(t)}
 
         match = klass.LAST_PROGRESS_RE.match(line)
         if match is not None:
             return {'finished': True}
-
-class FFmpegConverterInfo1080p(FFmpegConverterInfo):
-    def __init__(self, name):
-        FFmpegConverterInfo.__init__(self, name, 1920, 1080)
-
-class FFmpegConverterInfo720p(FFmpegConverterInfo):
-    def __init__(self, name):
-        FFmpegConverterInfo.__init__(self, name, 1080, 720)
-
-class FFmpegConverterInfo480p(FFmpegConverterInfo):
-    def __init__(self, name):
-        FFmpegConverterInfo.__init__(self, name, 720, 480)
 
 class ConverterManager(object):
     def __init__(self):
@@ -223,7 +352,7 @@ class ConverterManager(object):
 
     def startup(self):
         self.load_simple_converters()
-        self.load_converters(resources.converter_scripts())
+        #self.load_converters(resources.converter_scripts())
 
     def brand_to_converters(self, brand):
         try:
